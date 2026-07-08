@@ -5,4 +5,17 @@ requires-python = ">=3.10"
 dependencies = [
     "ruff>=0.15.20",
     "ty>=0.0.56",
+    "jax>=0.4.20",
+    "flax>=0.8.0",
+    "optax>=0.1.7",
+    "datasets>=2.14.0",
+    "sentencepiece>=0.1.99",
+    "nltk>=3.8.0",
+]
+
+[project.optional-dependencies]
+train = [
+    "datasets",
+    "sentencepiece",
+    "nltk",
 ]

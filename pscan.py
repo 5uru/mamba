@@ -1,35 +1,39 @@
 import jax
 import jax.numpy as jnp
 from jax.lax import associative_scan
+from jax import lax
 
+# ==============================================================================
+# VRAI PARALLEL SCAN (Associative Scan)
+# ==============================================================================
 def pscan_jax(A, X):
-    def combine(elem1, elem2):
-        A1, X1 = elem1
-        A2, X2 = elem2
-        return A2 * A1, A2 * X1 + X2
+    """
+    Implémentation Parallel Scan optimisée pour JAX.
+    Complexité temporelle : O(L * log(L)) au lieu de O(L^2) ou O(L) séquentiel.
 
-    A_padded = jnp.concatenate([jnp.ones_like(A[:, :1]), A], axis=1)
-    X_padded = jnp.concatenate([jnp.zeros_like(X[:, :1]), X], axis=1)
+    A : (B, L, D, N) - Matrices de transition (diagonales)
+    X : (B, L, D, N) - Vecteurs d'entrée
+    Retourne : (B, L, D, N) - États cachés
+    """
+    # L'opération binaire associative pour le SSM :
+    # Si on a deux pas de temps (a1, b1) et (a2, b2) tels que :
+    # h1 = a1 * h0 + b1
+    # h2 = a2 * h1 + b2
+    # Alors les combiner donne : h2 = (a2*a1)*h0 + (a2*b1 + b2)
+    # Comme A est diagonale, la multiplication matricielle est élément-wise (*)
+    def combine(e1, e2):
+        a1, b1 = e1
+        a2, b2 = e2
+        return a2 * a1, a2 * b1 + b2
 
-    _, H_padded = associative_scan(combine, (A_padded, X_padded), axis=1)
-    return H_padded[:, 1:]
+    # associative_scan travaille sur l'axe 0. On déplace la dimension L (axe 1) à l'axe 0.
+    A_transposed = jnp.moveaxis(A, 1, 0)  # Shape : (L, B, D, N)
+    X_transposed = jnp.moveaxis(X, 1, 0)  # Shape : (L, B, D, N)
 
-# 1. Définition d'une fonction de perte quelconque
-def loss_fn(A, X):
-    H = pscan_jax(A, X)
-    return jnp.mean(H ** 2) # Loss simple : moyenne des carrés
+    # Exécution du scan parallèle
+    _, Y_transposed = jax.lax.associative_scan(combine, (A_transposed, X_transposed), axis=0)
 
-# 2. Création de données fictives (Batch=2, L=5, D=3, N=4)
-key = jax.random.PRNGKey(42)
-A_dummy = jax.random.normal(key, (10000, 5, 3, 4))
-X_dummy = jax.random.normal(key, (10000, 5, 3, 4))
+    # On remet L à sa place initiale (axe 0 -> axe 1)
+    return jnp.moveaxis(Y_transposed, 0, 1)
 
-# 3. Calcul de la loss
-loss = loss_fn(A_dummy, X_dummy)
-print(f"Loss: {loss}")
 
-# 4. Calcul DES GRADIENTS (En une seule ligne !)
-grad_A, grad_X = jax.grad(loss_fn, argnums=(0, 1))(A_dummy, X_dummy)
-
-print(f"Gradient shape pour A: {grad_A.shape}") # (2, 5, 3, 4)
-print(f"Gradient shape pour X: {grad_X.shape}") # (2, 5, 3, 4)
