@@ -10,7 +10,7 @@ dependencies = [
     "optax>=0.1.7",
     "datasets>=2.14.0",
     "sentencepiece>=0.1.99",
-    "nltk>=3.8.0",
+    "nltk*",
     "psutil>=5.9.0",
 ]
 
